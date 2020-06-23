@@ -43,7 +43,7 @@ x_train, x_val, y_train, y_val = train_test_split(train_data.values[:, 1:], trai
 
 
 batch_size = 64
-num_epochs = 10
+num_epochs = 30
 
 # In[ ]:
 
@@ -84,6 +84,8 @@ class Net(nn.Module):
             nn.Conv2d(256, 384, kernel_size=3, stride=2, padding=1, bias=False),     # 4*4*384
             nn.BatchNorm2d(384),
             nn.ReLU(True),
+            nn.Dropout(0.25),
+
             nn.Conv2d(384, 384, kernel_size=3, stride=2, padding=1, bias=False),    # 2*2*384
             nn.BatchNorm2d(384),
             nn.ReLU(True),
@@ -93,7 +95,8 @@ class Net(nn.Module):
             nn.Conv2d(384, 256, kernel_size=3, stride=1, padding=1, bias=False),    # 2*2*256
             nn.BatchNorm2d(256),
             nn.ReLU(True),
-            nn.MaxPool2d(kernel_size=2, stride=2)                       # 1*1*256
+            nn.MaxPool2d(kernel_size=2, stride=2) ,
+            nn.Dropout(0.25),# 1*1*256
         )
         self.classifier = nn.Sequential(
             nn.Linear(256, 128),
@@ -113,10 +116,13 @@ class Net(nn.Module):
 
 # alexnet = models.alexnet()
 # pretrain_alexnet = models.alexnet(pretrained=True)
-net = resnet = models.resnet50(pretrained=True).cuda()
-# print(resnet)
+# net = resnet = models.resnet50(pretrained=False).cuda()
+# # print(resnet)
+
+net = models.resnet18(pretrained=False).cuda()
+print(net)
 net.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False).cuda()
-net.fc = nn.Linear(2048, 10).cuda()
+net.fc = nn.Linear(512, 10).cuda()
 
 #net = Net().cuda()
 #optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
@@ -167,6 +173,8 @@ for epoch in range(num_epochs):
 acc = test()
 print(acc)
 
+with open('./save/results.csv', 'a') as f:
+    print(acc, file=f)
 
 # In[ ]:
 
