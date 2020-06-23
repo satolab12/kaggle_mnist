@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.optim as optim
 import torch.functional as F
 from sklearn.model_selection import train_test_split
+import torchvision.models as models
 
 
 # In[ ]:
@@ -110,9 +111,16 @@ class Net(nn.Module):
 
 # In[ ]:
 
+# alexnet = models.alexnet()
+# pretrain_alexnet = models.alexnet(pretrained=True)
+net = resnet = models.resnet50(pretrained=True).cuda()
+# print(resnet)
+net.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False).cuda()
+net.fc = nn.Linear(2048, 10).cuda()
 
-net = Net().cuda()
-optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
+#net = Net().cuda()
+#optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
+optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
 criterion = nn.CrossEntropyLoss()
 
 
