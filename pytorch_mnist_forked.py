@@ -36,6 +36,7 @@ sample_submission = pd.read_csv('../DATASET/mnist/digit-recognizer/sample_submis
 
 # In[ ]:
 
+# test
 
 x_train, x_val, y_train, y_val = train_test_split(train_data.values[:, 1:], train_data.values[:, 0], test_size=0.2) 
 
