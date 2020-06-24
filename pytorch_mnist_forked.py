@@ -26,6 +26,8 @@ import torch.functional as F
 from sklearn.model_selection import train_test_split
 import torchvision.models as models
 
+from hashimoto_lib.network.tanhexp import Tanhexp
+
 
 # In[ ]:
 
@@ -76,33 +78,41 @@ class Net(nn.Module):
         self.feature = nn.Sequential(
             nn.Conv2d(1, 96, kernel_size = 3, stride = 2, padding = 1, bias = False), # 14 * 14 * 96
             nn.BatchNorm2d(96),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.MaxPool2d(kernel_size=2, stride=2),  # 7 * 7 * 96
             nn.Conv2d(96, 256, kernel_size=3, stride=1, padding=1,bias=False),  # 7*7*256
             nn.BatchNorm2d(256),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.Conv2d(256, 384, kernel_size=3, stride=2, padding=1, bias=False),     # 4*4*384
             nn.BatchNorm2d(384),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.Dropout(0.25),
 
             nn.Conv2d(384, 384, kernel_size=3, stride=2, padding=1, bias=False),    # 2*2*384
             nn.BatchNorm2d(384),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.Conv2d(384, 384, kernel_size=3, stride=1, padding=1, bias=False),    # 2*2*384
             nn.BatchNorm2d(384),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.Conv2d(384, 256, kernel_size=3, stride=1, padding=1, bias=False),    # 2*2*256
             nn.BatchNorm2d(256),
-            nn.ReLU(True),
+            #nn.ReLU(True),
+            Tanhexp(),
             nn.MaxPool2d(kernel_size=2, stride=2) ,
             nn.Dropout(0.25),# 1*1*256
         )
         self.classifier = nn.Sequential(
             nn.Linear(256, 128),
-            nn.ReLU(),
+            #nn.ReLU(),
+            Tanhexp(),
             nn.Linear(128, 128),
-            nn.ReLU(),
+            #nn.ReLU(),
+            Tanhexp(),
             nn.Linear(128, num_classes)
         )
     def forward(self, x):
@@ -119,12 +129,12 @@ class Net(nn.Module):
 # net = resnet = models.resnet50(pretrained=False).cuda()
 # # print(resnet)
 
-net = models.resnet18(pretrained=False).cuda()
-print(net)
-net.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False).cuda()
-net.fc = nn.Linear(512, 10).cuda()
+# net = models.resnet18(pretrained=False).cuda()
+# print(net)
+# net.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False).cuda()
+# net.fc = nn.Linear(512, 10).cuda()
 
-#net = Net().cuda()
+net = Net().cuda()
 #optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
 optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
 criterion = nn.CrossEntropyLoss()
