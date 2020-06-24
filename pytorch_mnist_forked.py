@@ -22,12 +22,15 @@ import torch.nn as nn
 from torchvision import transforms, models
 from torch.utils.data import DataLoader, TensorDataset
 import torch.optim as optim
+import torch_optimizer as optimtorch
 import torch.functional as F
 from sklearn.model_selection import train_test_split
 import torchvision.models as models
 
 from hashimoto_lib.network.tanhexp import Tanhexp
-
+from torch.optim.lr_scheduler import LambdaLR
+from packaages.dataset import DatasetMNIST,TransformDataset
+from torchvision.transforms import Compose, ToPILImage, Pad, RandomAffine, RandomErasing, ToTensor, Normalize
 
 # In[ ]:
 
@@ -45,7 +48,7 @@ x_train, x_val, y_train, y_val = train_test_split(train_data.values[:, 1:], trai
 
 
 batch_size = 64
-num_epochs = 30
+num_epochs = 30#30
 
 # In[ ]:
 
@@ -56,16 +59,39 @@ x_val_tensor = torch.from_numpy(x_val.astype(np.float32)/255).view(-1, 1, 28, 28
 y_val_tensor = torch.from_numpy(y_val)
 test_tensor = torch.from_numpy(test_data.values[:,:].astype(np.float32)/255).view(-1, 1, 28, 28)
 
-train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-val_dataset = TensorDataset(x_val_tensor, y_val_tensor)
-test_dataset = TensorDataset(test_tensor)
+# train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
+# val_dataset = TensorDataset(x_val_tensor, y_val_tensor)
 
+
+
+
+train_transform = Compose([
+    ToPILImage(),
+    Pad(2),
+    RandomAffine(degrees=30, translate=(0.2, 0.2), shear=0.2),
+    ToTensor(),
+    #Normalize((X_mean,), (X_std,)),
+    RandomErasing()
+])
+
+test_transform = Compose([
+    ToPILImage(),
+    Pad(2),
+    ToTensor(),
+    #Normalize((X_mean,), (X_std,))
+])
 
 # In[ ]:
 
 
-train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
-val_loader = DataLoader(val_dataset, batch_size = batch_size, shuffle = False)
+test_dataset = TensorDataset(test_tensor)
+
+train_loader = DataLoader(TransformDataset(train_transform, x_train_tensor, y_train_tensor), batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(TransformDataset(test_transform, x_val_tensor, y_val_tensor), batch_size=batch_size, shuffle=False)
+
+
+# train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+# val_loader = DataLoader(val_dataset, batch_size = batch_size, shuffle = False)
 test_loader = DataLoader(test_dataset, batch_size = batch_size, shuffle = False)
 
 
@@ -136,9 +162,12 @@ class Net(nn.Module):
 
 net = Net().cuda()
 #optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
-optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
-criterion = nn.CrossEntropyLoss()
+#optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
+# optimizer = optim.RMSprop(net.parameters(),lr=1.0e-4)#momentum=0.9, weight_decay=0.0001)
 
+optimizer = optimtorch.AdaBound(net.parameters(), lr=1.0e-4,betas=(0.5,0.999))#momentum=0.9, weight_decay=0.0001)
+criterion = nn.CrossEntropyLoss()
+scheduler = LambdaLR(optimizer, lr_lambda = lambda epoch: 0.95 ** epoch)
 
 # In[ ]:
 
@@ -167,6 +196,7 @@ best_acc = 0.0
 for epoch in range(num_epochs):
     net.train()
     sum_loss = 0.0
+    print(scheduler.get_lr())
     for i, data in enumerate(train_loader):
         inputs, labels = data
         inputs = inputs.cuda()
@@ -180,6 +210,7 @@ for epoch in range(num_epochs):
         if i % 100 == 99:
             print('[%d %d] loss:%.03f' % (epoch+1, i+1, sum_loss / 100))
             sum_loss = 0.0
+    scheduler.step()
 acc = test()
 print(acc)
 
