@@ -7,7 +7,6 @@
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 
-
 import os
 for dirname, _, filenames in os.walk('/kaggle/input'):
     for filename in filenames:
@@ -21,19 +20,36 @@ import torch
 import torch.nn as nn
 from torchvision import transforms, models
 from torch.utils.data import DataLoader, TensorDataset
-import torch.optim as optim
-import torch_optimizer as optimtorch
+# import torch.optim as optim
 import torch.functional as F
 from sklearn.model_selection import train_test_split
 import torchvision.models as models
+import torch_optimizer  as optim
 
 from hashimoto_lib.network.tanhexp import Tanhexp
-from torch.optim.lr_scheduler import LambdaLR
-from packaages.dataset import DatasetMNIST,TransformDataset
-from torchvision.transforms import Compose, ToPILImage, Pad, RandomAffine, RandomErasing, ToTensor, Normalize
+from packages.dataset import TensorDataset_Aug
 
 # In[ ]:
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.logits = logits
+        self.reduce = reduce
 
+    def forward(self, inputs, targets):
+        if self.logits:
+            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduce=False)
+        else:
+            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+
+        if self.reduce:
+            return torch.mean(F_loss)
+        else:
+            return F_loss
 
 train_data = pd.read_csv('../DATASET/mnist/digit-recognizer/train.csv')
 test_data = pd.read_csv('../DATASET/mnist/digit-recognizer/test.csv')
@@ -44,14 +60,13 @@ sample_submission = pd.read_csv('../DATASET/mnist/digit-recognizer/sample_submis
 
 # test
 
-x_train, x_val, y_train, y_val = train_test_split(train_data.values[:, 1:], train_data.values[:, 0], test_size=0.2) 
+x_train, x_val, y_train, y_val = train_test_split(train_data.values[:, 1:], train_data.values[:, 0], test_size=0.2)
 
 
 batch_size = 64
-num_epochs = 30#30
+num_epochs = 30
 
 # In[ ]:
-
 
 x_train_tensor = torch.from_numpy(x_train.astype(np.float32)/255).view(-1, 1, 28, 28)
 y_train_tensor = torch.from_numpy(y_train)
@@ -59,39 +74,33 @@ x_val_tensor = torch.from_numpy(x_val.astype(np.float32)/255).view(-1, 1, 28, 28
 y_val_tensor = torch.from_numpy(y_val)
 test_tensor = torch.from_numpy(test_data.values[:,:].astype(np.float32)/255).view(-1, 1, 28, 28)
 
+aug = transforms.Compose([
+    #transforms.Grayscale(),
+    transforms.ToPILImage(),
+    transforms.RandomApply([
+    #transforms.RandomAffine(15),#20
+    transforms.RandomRotation(10),#20
+    transforms.ToTensor(),
+    #transforms.RandomErasing(scale=(0.02, 0.05), ratio=(0.3, 0.5),),
+    transforms.ToPILImage(),
+    ], p=0.5),
+
+    transforms.ToTensor(),
+ # [0,1] => [-1,1]
+])
+
+train_dataset = TensorDataset_Aug(x_train_tensor, y_train_tensor,transforms=aug)
+val_dataset = TensorDataset_Aug(x_val_tensor, y_val_tensor)
+test_dataset = TensorDataset_Aug(test_tensor)
+
 # train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
 # val_dataset = TensorDataset(x_val_tensor, y_val_tensor)
+# test_dataset = TensorDataset(test_tensor)
 
-
-
-
-train_transform = Compose([
-    ToPILImage(),
-    Pad(2),
-    RandomAffine(degrees=30, translate=(0.2, 0.2), shear=0.2),
-    ToTensor(),
-    #Normalize((X_mean,), (X_std,)),
-    RandomErasing()
-])
-
-test_transform = Compose([
-    ToPILImage(),
-    Pad(2),
-    ToTensor(),
-    #Normalize((X_mean,), (X_std,))
-])
 
 # In[ ]:
-
-
-test_dataset = TensorDataset(test_tensor)
-
-train_loader = DataLoader(TransformDataset(train_transform, x_train_tensor, y_train_tensor), batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(TransformDataset(test_transform, x_val_tensor, y_val_tensor), batch_size=batch_size, shuffle=False)
-
-
-# train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
-# val_loader = DataLoader(val_dataset, batch_size = batch_size, shuffle = False)
+train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+val_loader = DataLoader(val_dataset, batch_size = batch_size, shuffle = False)
 test_loader = DataLoader(test_dataset, batch_size = batch_size, shuffle = False)
 
 
@@ -162,12 +171,12 @@ class Net(nn.Module):
 
 net = Net().cuda()
 #optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
-#optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
-# optimizer = optim.RMSprop(net.parameters(),lr=1.0e-4)#momentum=0.9, weight_decay=0.0001)
+# optimizer = optim.Adam(net.parameters(), lr=1.0e-4, betas=(0.5,0.9999),)#momentum=0.9, weight_decay=0.0001)
 
-optimizer = optimtorch.AdaBound(net.parameters(), lr=1.0e-4,betas=(0.5,0.999))#momentum=0.9, weight_decay=0.0001)
+optimizer = optim.AdaBound(net.parameters(),lr=1.0e-4, betas=(0.5,0.9999))
 criterion = nn.CrossEntropyLoss()
-scheduler = LambdaLR(optimizer, lr_lambda = lambda epoch: 0.95 ** epoch)
+f_loss = FocalLoss
+
 
 # In[ ]:
 
@@ -196,21 +205,19 @@ best_acc = 0.0
 for epoch in range(num_epochs):
     net.train()
     sum_loss = 0.0
-    print(scheduler.get_lr())
     for i, data in enumerate(train_loader):
         inputs, labels = data
         inputs = inputs.cuda()
         labels = labels.cuda()
         optimizer.zero_grad()
         outputs = net(inputs)
-        loss = criterion(outputs, labels)
+        loss = f_loss(outputs, labels)
         loss.backward()
         optimizer.step()
         sum_loss += loss.item()
         if i % 100 == 99:
             print('[%d %d] loss:%.03f' % (epoch+1, i+1, sum_loss / 100))
             sum_loss = 0.0
-    scheduler.step()
 acc = test()
 print(acc)
 
